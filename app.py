@@ -37,8 +37,10 @@ $('prevMonth').onclick=()=>{monthCursor.setMonth(monthCursor.getMonth()-1);rende
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));$('saveState').textContent='이 브라우저에 저장했어요.';}catch(e){$('saveState').textContent='저장이 차단돼 있어요. 이 화면을 닫으면 기록이 사라질 수 있어요.';}}
 if(state.quoteEdition!==2){state.seen=[];state.quoteEdition=2;state.quote=Math.floor(Math.random()*500);}
 function nextQuote(){let left=Array.from({length:500},(_,i)=>i).filter(i=>!state.seen.includes(i));if(!left.length){state.seen=[];left=Array.from({length:500},(_,i)=>i);}state.quote=left[Math.floor(Math.random()*left.length)];state.seen.push(state.quote);}
-function tick(){let changed=false;const now=Date.now();for(const t of state.tasks){if(t.status==='pending'&&now>=t.due){t.status='expired';changed=true;}}
-if(state.tasks.length&&state.tasks.every(t=>t.status==='expired')&&!state.crashed){state.crashed=true;nextQuote();changed=true;}
+const popEffects=[];let fallEffect=null;
+function startPop(task){const live=state.tasks.filter(t=>t.status!=='expired'),i=live.findIndex(t=>t.id===task.id);if(i<0)return;const r=$('sky').getBoundingClientRect();popEffects.push({x:r.width/2+(i%5-2)*r.width/5.6+(live.length<5?(5-live.length)*r.width/11.2:0),y:60+Math.floor(i/5)*88,color:colors[state.tasks.indexOf(task)%6],start:performance.now()});}
+function tick(){let changed=false;const now=Date.now();for(const t of state.tasks){if(t.status==='pending'&&now>=t.due){startPop(t);t.status='expired';changed=true;}}
+if(state.tasks.length&&state.tasks.every(t=>t.status==='expired')&&!state.crashed){state.crashed=true;fallEffect={start:performance.now(),from:displayedHeight,impact:false};nextQuote();changed=true;}
 if(changed)save();render();}
 const colors=['#ff9ca6','#ffe078','#c4b1ff','#8be0cb','#ffba7e','#9fcdff'];
 let displayedHeight=null,lastFrame=0;
@@ -47,7 +49,7 @@ const c=$('sky'),r=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
 if(c.width!==Math.round(r.width*dpr)||c.height!==Math.round(r.height*dpr)){c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);}
 const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,r.width,r.height);
 const w=r.width,h=r.height,live=state.tasks.filter(t=>t.status!=='expired'),target=state.crashed?h-87:h-180-Math.min(60,live.length*7);
-if(displayedHeight===null)displayedHeight=target;const dt=Math.min(70,stamp-lastFrame||16);lastFrame=stamp;displayedHeight+=(target-displayedHeight)*Math.min(1,dt/180);
+if(displayedHeight===null)displayedHeight=target;const dt=Math.min(70,stamp-lastFrame||16);lastFrame=stamp;if(fallEffect&&state.crashed){const elapsed=stamp-fallEffect.start;const start=fallEffect.from??(h-220);if(elapsed<420){displayedHeight=start-8*Math.sin(elapsed/420*Math.PI);}else{const t=Math.min(1,(elapsed-420)/1050);displayedHeight=start+(target-start)*t*t;if(t===1&&!fallEffect.impact){fallEffect.impact=true;fallEffect.hitAt=stamp;}if(fallEffect.impact){const q=(stamp-fallEffect.hitAt)/650;if(q<1)displayedHeight-=Math.abs(Math.sin(q*Math.PI*2))*14*(1-q);}}}else{displayedHeight+=(target-displayedHeight)*Math.min(1,dt/180);}
 const y=displayedHeight,cx=w/2,scale=Math.min(1,w/420);
 function shape(points,fill){g.beginPath();points.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.closePath();g.fillStyle=fill;g.fill();}
 // Every string ends at the exact roof apex, including during a fall.
@@ -56,20 +58,23 @@ g.strokeStyle='#667f91';g.lineWidth=1;g.beginPath();g.moveTo(x,by+bh);g.lineTo(c
 const vivid=['#f4486c','#ffbd16','#8956ec','#15b794','#f87926','#258ef0'];g.fillStyle=(t.status==='done'?vivid:colors)[state.tasks.indexOf(t)%6];if(t.status==='done'){g.shadowColor=g.fillStyle;g.shadowBlur=14;}g.beginPath();g.ellipse(x,by,bw,bh,0,0,Math.PI*2);g.fill();g.shadowBlur=0;g.fillStyle='#ffffff70';g.beginPath();g.ellipse(x-bw*.3,by-bh*.3,bw*.15,bh*.3,.3,0,Math.PI*2);g.fill();
 g.fillStyle='#24364d';g.textAlign='center';g.font='bold '+Math.max(10,12*scale)+'px sans-serif';const text=(t.status==='done'?'✓ ':'')+t.title;g.fillText(text.length>8?text.slice(0,7)+'…':text,x,by+4,bw*1.85);
 });
-g.save();g.translate(cx,y);g.scale(scale,scale);if(state.crashed)g.rotate(-.16);
+g.save();g.translate(cx,y);g.scale(scale,scale);if(state.crashed){const elapsed=fallEffect?stamp-fallEffect.start:2000;g.rotate(elapsed<420?Math.sin(elapsed/35)*.045:-.16*Math.min(1,(elapsed-420)/1050));}
 g.fillStyle='#fff1c9';g.fillRect(-65,-12,130,94);shape([[-80,-12],[0,-70],[80,-12]],'#f57959');shape([[-80,-12],[0,-70],[0,-57],[-65,-10]],'#ffc19c');g.fillStyle='#8c6149';g.fillRect(36,-62,16,34);g.fillStyle='#2c8495';g.fillRect(-13,30,28,52);
 [-43,27].forEach(x=>{g.fillStyle='#70c5de';g.fillRect(x,9,22,23);g.strokeStyle='#fff';g.lineWidth=2;g.strokeRect(x,9,22,23);g.beginPath();g.moveTo(x+11,9);g.lineTo(x+11,32);g.stroke();});// Hand-drawn architectural detail: clapboard, roof tiles and framed windows.
 g.strokeStyle='#dcc99e';g.lineWidth=.8;for(let yy=-2;yy<80;yy+=9){g.beginPath();g.moveTo(-64,yy);g.lineTo(-15,yy);g.moveTo(17,yy);g.lineTo(64,yy);g.stroke();}
 g.save();g.beginPath();g.moveTo(-78,-13);g.lineTo(0,-68);g.lineTo(78,-13);g.closePath();g.clip();g.strokeStyle='#cf604c';for(let yy=-58;yy<-10;yy+=10){g.beginPath();g.moveTo(-80,yy);g.lineTo(80,yy);g.stroke();for(let xx=-80+(yy%20?8:0);xx<80;xx+=18){g.beginPath();g.moveTo(xx,yy);g.lineTo(xx+4,yy+10);g.stroke();}}g.restore();
 [-43,27].forEach(xx=>{g.strokeStyle='#fff9e8';g.lineWidth=4;g.strokeRect(xx-2,7,26,27);g.fillStyle='#377d82';g.fillRect(xx-7,7,4,27);g.fillRect(xx+25,7,4,27);g.fillStyle='#d68b69';g.fillRect(xx-5,36,32,8);for(let j=0;j<4;j++){g.fillStyle=j%2?'#ffbc6b':'#e87387';g.beginPath();g.arc(xx+j*7,33,3,0,7);g.fill();}});
 g.strokeStyle='#f9e8c2';g.lineWidth=4;g.strokeRect(-15,28,32,54);g.fillStyle='#ffd26c';g.beginPath();g.arc(8,58,2.5,0,7);g.fill();g.fillStyle='#f1cc88';g.fillRect(-73,80,146,9);g.fillStyle='#d8b980';g.fillRect(-28,89,60,7);g.fillRect(-34,96,72,5);g.restore();
+// Pop rings, flying latex fragments and a brief comic burst.
+for(let i=popEffects.length-1;i>=0;i--){const e=popEffects[i],t=(stamp-e.start)/900;if(t>1){popEffects.splice(i,1);continue;}g.save();g.globalAlpha=1-t;g.strokeStyle='#fff';g.lineWidth=3*(1-t);g.beginPath();g.arc(e.x,e.y,12+t*65,0,Math.PI*2);g.stroke();for(let j=0;j<14;j++){const a=j/14*Math.PI*2,dist=12+95*t;g.save();g.translate(e.x+Math.cos(a)*dist,e.y+Math.sin(a)*dist+45*t*t);g.rotate(a+t*7);g.fillStyle=j%3?e.color:'#fff6a1';g.fillRect(-3,-5,6,11);g.restore();}if(t<.45){g.font='900 24px sans-serif';g.textAlign='center';g.fillStyle='#fff';g.strokeStyle='#d66357';g.lineWidth=3;g.strokeText('펑!',e.x,e.y-10);g.fillText('펑!',e.x,e.y-10);}g.restore();}
+if(fallEffect?.impact){const t=(stamp-fallEffect.hitAt)/1100;if(t<1){g.save();g.globalAlpha=(1-t)*.7;g.fillStyle='#f6e6cb';for(let i=0;i<9;i++){g.beginPath();g.ellipse(cx+(i-4)*(10+22*t),h-25-20*Math.sin(t*Math.PI),12+20*t,9+10*t,0,0,Math.PI*2);g.fill();}g.restore();}}
 if(!state.tasks.length){g.fillStyle='#29536e';g.font='bold 15px sans-serif';g.textAlign='center';g.fillText('첫 할 일을 적고 집을 띄워봐!',w/2,80);}
 if(state.crashed){g.font='32px sans-serif';g.textAlign='center';g.fillText('💥',cx+62,y+40);}
 }
-function animate(stamp){drawSky(stamp);requestAnimationFrame(animate);}requestAnimationFrame(animate);
+function animate(stamp){drawSky(stamp);if(state.crashed&&fallEffect&&stamp-fallEffect.start>=1650)$('crashCard').classList.remove('hidden');requestAnimationFrame(animate);}requestAnimationFrame(animate);
 function render(){const remaining=state.tasks.filter(t=>t.status!=='expired').length;const done=state.tasks.filter(t=>t.status==='done').length;
 $('status').textContent=!state.tasks.length?'첫 풍선을 띄워봐!':state.crashed?'💥 집이 내려앉았어':`🎈 남은 풍선 ${remaining}개 · 완료 ${done}개`;
-$('house').classList.toggle('crash',state.crashed);$('house').style.bottom=state.crashed?'8px':(55+remaining*9)+'px';$('crashCard').classList.toggle('hidden',!state.crashed);$('quote').textContent=quotes[state.quote];
+$('house').classList.toggle('crash',state.crashed);$('house').style.bottom=state.crashed?'8px':(55+remaining*9)+'px';$('crashCard').classList.toggle('hidden',!state.crashed||Boolean(fallEffect&&performance.now()-fallEffect.start<1650));$('quote').textContent=quotes[state.quote];
 drawSky();$('tasks').replaceChildren();
 state.tasks.forEach((t,i)=>{
 const row=document.createElement('div');row.className='task';const title=document.createElement('b');title.textContent=t.title;row.append(title);const info=document.createElement('p');info.className='muted';let seconds=Math.max(0,Math.ceil((t.due-Date.now())/1000));info.textContent=t.status==='done'?'✅ 시간 안에 완료 · 풍선 유지':t.status==='expired'?'💥 마감 초과 · 풍선 터짐':`⏳ ${Math.floor(seconds/3600)}시간 ${Math.floor(seconds%3600/60)}분 ${seconds%60}초 남음`;row.append(info);const due=document.createElement('p');due.className='muted small';due.textContent='마감 '+new Date(t.due).toLocaleString('ko-KR');row.append(due);
@@ -77,7 +82,7 @@ if(t.status==='pending'){const btn=document.createElement('button');btn.textCont
 if(!state.tasks.length)$('tasks').textContent='위에서 첫 할 일을 추가해봐.';renderCalendar();
 }
 $('form').onsubmit=e=>{e.preventDefault();tick();const title=$('title').value.trim(),due=new Date($('deadline').value).getTime();$('error').textContent='';if(!title||!Number.isFinite(due)||due<=Date.now()){$('error').textContent='할 일과 미래 마감 시간을 입력해줘.';return;}if(state.crashed){$('error').textContent='새 도전 시작을 눌러 다시 띄워봐.';return;}if(state.tasks.length>=10){$('error').textContent='한 도전에는 10개까지 가능해.';return;}state.tasks.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2),title,due,createdAt:Date.now(),status:'pending'});$('title').value='';save();render();};
-$('newRound').onclick=()=>{if(state.tasks.length&&!confirm('현재 풍선과 할 일을 정리하고 새 도전을 시작할까요? 하루 기록은 남아요.'))return;state.history.push(...state.tasks.map(t=>({...t,status:t.status==='pending'?'cancelled':t.status,endedAt:Date.now()})));state.tasks=[];state.crashed=false;save();render();};
+$('newRound').onclick=()=>{if(state.tasks.length&&!confirm('현재 풍선과 할 일을 정리하고 새 도전을 시작할까요? 하루 기록은 남아요.'))return;state.history.push(...state.tasks.map(t=>({...t,status:t.status==='pending'?'cancelled':t.status,endedAt:Date.now()})));state.tasks=[];state.crashed=false;fallEffect=null;popEffects.length=0;save();render();};
 $('another').onclick=()=>{nextQuote();save();render();};$('playTab').onclick=()=>{$('play').classList.remove('hidden');$('family').classList.add('hidden');};$('familyTab').onclick=()=>{$('family').classList.remove('hidden');$('play').classList.add('hidden');};
 let d=new Date(Date.now()+30*60000);d=new Date(d-d.getTimezoneOffset()*60000);$('deadline').value=d.toISOString().slice(0,16);tick();setInterval(tick,1000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick();});const logoImage=document.querySelector('#splash img');let splashStarted=false;const closeSplash=()=>{if(splashStarted)return;splashStarted=true;requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(()=>{$('splash').remove();document.body.classList.remove('loading');},3000)));};if(logoImage.complete)closeSplash();else{logoImage.onload=closeSplash;logoImage.onerror=closeSplash;}
 </script></body></html>''',height=2100,scrolling=True)
