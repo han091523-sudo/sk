@@ -141,8 +141,8 @@ function renderDailyLimit(){
  if(today!==lastLimitDay){lastLimitDay=today;$('error').textContent='';}
  const notice=$('dailyLimitNotice');notice.classList.toggle('hidden',!limited);
  if(limited&&notice.textContent!==DAILY_LIMIT_MESSAGE)notice.textContent=DAILY_LIMIT_MESSAGE;
- const submit=document.querySelector('#form button[type="submit"]');submit.disabled=limited;submit.textContent=limited?'오늘은 충분해요 · 내일 다시 만나요':'＋ 풍선 띄우기';
- $('dailyCount').textContent=limited?'밤 12시에 등록 한도가 초기화돼요. 기존 기록은 유지됩니다.':`오늘 등록 ${count}/50개 · 매일 밤 12시 초기화`;
+ const submit=document.querySelector('#form button[type="submit"]');submit.disabled=limited;submit.hidden=limited;submit.textContent='＋ 풍선 띄우기';
+ $('dailyCount').hidden=limited;$('dailyCount').textContent=limited?'':`오늘 등록 ${count}/50개 · 매일 밤 12시 초기화`;
 }
 function render(){renderDailyLimit();const remaining=state.tasks.filter(t=>t.status!=='expired').length;const done=state.tasks.filter(t=>t.status==='done').length;
 $('status').textContent=!state.tasks.length?'첫 풍선을 띄워봐!':state.crashed?'💥 집이 내려앉았어':`🎈 남은 풍선 ${remaining}개 · 완료 ${done}개`;
